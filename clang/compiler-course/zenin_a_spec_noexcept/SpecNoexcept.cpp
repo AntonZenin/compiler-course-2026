@@ -3,45 +3,79 @@
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendPluginRegistry.h"
 #include "llvm/Support/raw_ostream.h"
+#include "clang/Rewrite/Core/Rewriter.h"
 
 namespace {
-class ExampleVisitor final : public clang::RecursiveASTVisitor<ExampleVisitor> {
+class ThrowFinder final : public clang::RecursiveASTVisitor<ThrowFinder> {
 public:
-  explicit ExampleVisitor(clang::ASTContext *context) : m_context(context) {}
+  bool VisitCXXThrowExpr(clang::CXXThrowExpr *) {
+    m_hasThrow = true;
+    return false;
+  }
+  
+  bool hasThrow() const {return m_hasThrow; }
+
+private: 
+  bool m_hasThrow = false;
+};   
+
+class SpecNoexceptVisitor final : public clang::RecursiveASTVisitor<SpecNoexceptVisitor> {
+public:
+  explicit SpecNoexceptVisitor(clang::ASTContext *context, clang::Rewriter &rewriter) : m_context(context), m_rewriter(rewriter) {}
+
   bool VisitFunctionDecl(clang::FunctionDecl *func) {
+    // для отладки
+    llvm::errs() << "visiting: " << func->getNameAsString() << "\n";
+
+    if (!func->hasBody() || func->getExceptionSpecType() == clang::EST_BasicNoexcept) {
+      return true;
+    }
+
+    ThrowFinder finder;
+    finder.TraverseStmt(func->getBody());
+
+    if (!finder.hasThrow()) {
+      clang::SourceLocation loc = func->getFunctionTypeLoc().getRParenLoc();
+      m_rewriter.InsertTextAfter(loc.getLocWithOffset(1), " noexcept");
+    }
+
     func->dump();
     return true;
   }
 
 private:
   clang::ASTContext *m_context;
+  clang::Rewriter &m_rewriter;
 };
 
-class ExampleConsumer final : public clang::ASTConsumer {
+class SpecNoexceptConsumer final : public clang::ASTConsumer {
 public:
-  explicit ExampleConsumer(clang::ASTContext *context) : m_visitor(context) {}
+  explicit SpecNoexceptConsumer(clang::ASTContext *context, clang::Rewriter &rewriter) : m_visitor(context, rewriter) {}
 
   void HandleTranslationUnit(clang::ASTContext &context) override {
     m_visitor.TraverseDecl(context.getTranslationUnitDecl());
   }
 
 private:
-  ExampleVisitor m_visitor;
+  SpecNoexceptVisitor m_visitor;
 };
 
-class ExampleAction final : public clang::PluginASTAction {
+class SpecNoexceptAction final : public clang::PluginASTAction {
 public:
   std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &ci, llvm::StringRef) override {
-    return std::make_unique<ExampleConsumer>(&ci.getASTContext());
+    m_rewriter.setSourceMgr(ci.getSourceManager(), ci.getLangOpts());
+    return std::make_unique<SpecNoexceptConsumer>(&ci.getASTContext(), m_rewriter);
   }
 
   bool ParseArgs(const clang::CompilerInstance &ci,
                  const std::vector<std::string> &args) override {
     return true;
   }
+private: 
+  clang::Rewriter m_rewriter;
 };
 } // namespace
 
-static clang::FrontendPluginRegistry::Add<ExampleAction>
-    X("example_plugin", "Description plugin");
+static clang::FrontendPluginRegistry::Add<SpecNoexceptAction>
+    X("spec_noexcept", "Add noexcept specifier to functions that don't throw");
