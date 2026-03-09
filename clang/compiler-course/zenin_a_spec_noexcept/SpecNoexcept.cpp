@@ -10,7 +10,18 @@ class ThrowFinder final : public clang::RecursiveASTVisitor<ThrowFinder> {
 public:
   bool VisitCXXThrowExpr(clang::CXXThrowExpr *) {
     m_hasThrow = true;
-    return false;
+    return false; 
+  }
+
+  bool VisitCallExpr(clang::CallExpr *call) {
+    if (auto *callee = call->getDirectCallee()) {
+      auto specType = callee->getExceptionSpecType();
+      if (specType != clang::EST_BasicNoexcept && specType != clang::EST_NoexceptTrue) {
+        m_hasThrow = true;
+        return false;
+      }
+    }
+    return true;
   }
   
   bool hasThrow() const {return m_hasThrow; }
@@ -21,11 +32,11 @@ private:
 
 class SpecNoexceptVisitor final : public clang::RecursiveASTVisitor<SpecNoexceptVisitor> {
 public:
-  explicit SpecNoexceptVisitor(clang::ASTContext *context, clang::Rewriter &rewriter) : m_context(context), m_rewriter(rewriter) {}
+  explicit SpecNoexceptVisitor(clang::ASTContext *context, clang::Rewriter &rewriter) : m_rewriter(rewriter) {}
 
   bool VisitFunctionDecl(clang::FunctionDecl *func) {
-    // для отладки
-    llvm::errs() << "visiting: " << func->getNameAsString() << "\n";
+    
+    llvm::errs() << "Visiting: " << func->getNameAsString() << "\n";
 
     if (!func->hasBody() || func->getExceptionSpecType() == clang::EST_BasicNoexcept) {
       return true;
@@ -37,14 +48,12 @@ public:
     if (!finder.hasThrow()) {
       clang::SourceLocation loc = func->getFunctionTypeLoc().getRParenLoc();
       m_rewriter.InsertTextAfter(loc.getLocWithOffset(1), " noexcept");
+      func->dump();
     }
-
-    func->dump();
     return true;
   }
 
 private:
-  clang::ASTContext *m_context;
   clang::Rewriter &m_rewriter;
 };
 
