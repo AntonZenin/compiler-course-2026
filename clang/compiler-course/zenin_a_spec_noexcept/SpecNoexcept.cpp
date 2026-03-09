@@ -2,21 +2,23 @@
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendPluginRegistry.h"
-#include "llvm/Support/raw_ostream.h"
 #include "clang/Rewrite/Core/Rewriter.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace {
 class ThrowFinder final : public clang::RecursiveASTVisitor<ThrowFinder> {
 public:
   bool VisitCXXThrowExpr(clang::CXXThrowExpr *) {
     m_hasThrow = true;
+
     return false; 
   }
 
   bool VisitCallExpr(clang::CallExpr *call) {
     if (auto *callee = call->getDirectCallee()) {
       auto specType = callee->getExceptionSpecType();
-      if (specType != clang::EST_BasicNoexcept && specType != clang::EST_NoexceptTrue) {
+      if (specType != clang::EST_BasicNoexcept && 
+          specType != clang::EST_NoexceptTrue) {
         m_hasThrow = true;
         return false;
       }
