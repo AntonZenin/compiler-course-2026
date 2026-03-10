@@ -10,14 +10,14 @@ class ThrowFinder final : public clang::RecursiveASTVisitor<ThrowFinder> {
 public:
   bool VisitCXXThrowExpr(clang::CXXThrowExpr *) {
     m_hasThrow = true;
-
-    return false; 
+    
+    return false;
   }
 
   bool VisitCallExpr(clang::CallExpr *call) {
     if (auto *callee = call->getDirectCallee()) {
       auto specType = callee->getExceptionSpecType();
-      if (specType != clang::EST_BasicNoexcept && 
+      if (specType != clang::EST_BasicNoexcept &&
           specType != clang::EST_NoexceptTrue) {
         m_hasThrow = true;
         return false;
@@ -25,22 +25,26 @@ public:
     }
     return true;
   }
-  
-  bool hasThrow() const {return m_hasThrow; }
 
-private: 
+  bool hasThrow() const { return m_hasThrow; }
+
+private:
   bool m_hasThrow = false;
-};   
+};
 
-class SpecNoexceptVisitor final : public clang::RecursiveASTVisitor<SpecNoexceptVisitor> {
+class SpecNoexceptVisitor final
+    : public clang::RecursiveASTVisitor<SpecNoexceptVisitor> {
 public:
-  explicit SpecNoexceptVisitor(clang::ASTContext *context, clang::Rewriter &rewriter) : m_rewriter(rewriter) {}
+  explicit SpecNoexceptVisitor(clang::ASTContext *context,
+                               clang::Rewriter &rewriter)
+      : m_rewriter(rewriter) {}
 
   bool VisitFunctionDecl(clang::FunctionDecl *func) {
-    
+
     llvm::errs() << "Visiting: " << func->getNameAsString() << "\n";
 
-    if (!func->hasBody() || func->getExceptionSpecType() == clang::EST_BasicNoexcept) {
+    if (!func->hasBody() ||
+        func->getExceptionSpecType() == clang::EST_BasicNoexcept) {
       return true;
     }
 
@@ -61,7 +65,9 @@ private:
 
 class SpecNoexceptConsumer final : public clang::ASTConsumer {
 public:
-  explicit SpecNoexceptConsumer(clang::ASTContext *context, clang::Rewriter &rewriter) : m_visitor(context, rewriter) {}
+  explicit SpecNoexceptConsumer(clang::ASTContext *context,
+                                clang::Rewriter &rewriter)
+      : m_visitor(context, rewriter) {}
 
   void HandleTranslationUnit(clang::ASTContext &context) override {
     m_visitor.TraverseDecl(context.getTranslationUnitDecl());
@@ -76,14 +82,16 @@ public:
   std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &ci, llvm::StringRef) override {
     m_rewriter.setSourceMgr(ci.getSourceManager(), ci.getLangOpts());
-    return std::make_unique<SpecNoexceptConsumer>(&ci.getASTContext(), m_rewriter);
+    return std::make_unique<SpecNoexceptConsumer>(&ci.getASTContext(),
+                                                  m_rewriter);
   }
 
   bool ParseArgs(const clang::CompilerInstance &ci,
                  const std::vector<std::string> &args) override {
     return true;
   }
-private: 
+
+private:
   clang::Rewriter m_rewriter;
 };
 } // namespace
