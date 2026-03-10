@@ -10,7 +10,7 @@ class ThrowFinder final : public clang::RecursiveASTVisitor<ThrowFinder> {
 public:
   bool VisitCXXThrowExpr(clang::CXXThrowExpr *) {
     m_hasThrow = true;
-    
+
     return false;
   }
 
