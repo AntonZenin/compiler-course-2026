@@ -2,7 +2,6 @@
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendPluginRegistry.h"
-#include "clang/Rewrite/Core/Rewriter.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace {
@@ -16,13 +15,14 @@ public:
 
   bool VisitCallExpr(clang::CallExpr *call) {
     if (auto *callee = call->getDirectCallee()) {
-      auto specType = callee->getExceptionSpecType();
-      if (specType != clang::EST_BasicNoexcept &&
-          specType != clang::EST_NoexceptTrue) {
+      const auto *proto = callee->getType()->getAs<clang::FunctionProtoType>();
+      if (!proto || proto->getExceptionSpecType() == clang::EST_None) {
         m_hasThrow = true;
+
         return false;
       }
     }
+
     return true;
   }
 
@@ -35,39 +35,40 @@ private:
 class SpecNoexceptVisitor final
     : public clang::RecursiveASTVisitor<SpecNoexceptVisitor> {
 public:
-  explicit SpecNoexceptVisitor(clang::ASTContext *context,
-                               clang::Rewriter &rewriter)
-      : m_rewriter(rewriter) {}
+  explicit SpecNoexceptVisitor(clang::ASTContext &context)
+      : m_context(context) {}
 
   bool VisitFunctionDecl(clang::FunctionDecl *func) {
-
-    llvm::errs() << "Visiting: " << func->getNameAsString() << "\n";
-
-    if (!func->hasBody() ||
-        func->getExceptionSpecType() == clang::EST_BasicNoexcept) {
+    if (!func->hasBody())
       return true;
-    }
+
+    const auto *proto = func->getType()->getAs<clang::FunctionProtoType>();
+    if (!proto || proto->getExceptionSpecType() != clang::EST_None)
+      return true;
 
     ThrowFinder finder;
     finder.TraverseStmt(func->getBody());
 
     if (!finder.hasThrow()) {
-      clang::SourceLocation loc = func->getFunctionTypeLoc().getRParenLoc();
-      m_rewriter.InsertTextAfter(loc.getLocWithOffset(1), " noexcept");
+      clang::FunctionProtoType::ExtProtoInfo epi = proto->getExtProtoInfo();
+      epi.ExceptionSpec.Type = clang::EST_BasicNoexcept;
+      clang::QualType newType = m_context.getFunctionType(
+          proto->getReturnType(), proto->getParamTypes(), epi);
+      func->setType(newType);
       func->dump();
     }
+
     return true;
   }
 
 private:
-  clang::Rewriter &m_rewriter;
+  clang::ASTContext &m_context;
 };
 
 class SpecNoexceptConsumer final : public clang::ASTConsumer {
 public:
-  explicit SpecNoexceptConsumer(clang::ASTContext *context,
-                                clang::Rewriter &rewriter)
-      : m_visitor(context, rewriter) {}
+  explicit SpecNoexceptConsumer(clang::ASTContext &context)
+      : m_visitor(context) {}
 
   void HandleTranslationUnit(clang::ASTContext &context) override {
     m_visitor.TraverseDecl(context.getTranslationUnitDecl());
@@ -81,18 +82,13 @@ class SpecNoexceptAction final : public clang::PluginASTAction {
 public:
   std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &ci, llvm::StringRef) override {
-    m_rewriter.setSourceMgr(ci.getSourceManager(), ci.getLangOpts());
-    return std::make_unique<SpecNoexceptConsumer>(&ci.getASTContext(),
-                                                  m_rewriter);
+    return std::make_unique<SpecNoexceptConsumer>(ci.getASTContext());
   }
 
   bool ParseArgs(const clang::CompilerInstance &ci,
                  const std::vector<std::string> &args) override {
     return true;
   }
-
-private:
-  clang::Rewriter m_rewriter;
 };
 } // namespace
 
