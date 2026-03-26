@@ -71,7 +71,7 @@ llvmGetPassPluginInfo() {
             PB.registerPipelineParsingCallback(
                 [](llvm::StringRef name, llvm::FunctionPassManager &FPM,
                    llvm::ArrayRef<llvm::PassBuilder::PipelineElement>) -> bool {
-                  if (name == "replace-pass") {
+                  if (name == "Replace-pass") {
                     FPM.addPass(ZeninReplacePass{});
                     return true;
                   }
