@@ -2,7 +2,7 @@
 ; RUN: -passes=Replace-pass -S %s | FileCheck %s
 
 ; CHECK-LABEL: @mulByPow2
-; CHECK: shl
+; CHECK: shl i32 %x, 2
 ; CHECK-NOT: mul
 define i32 @mulByPow2(i32 %x) {
   %result = mul i32 %x, 4
@@ -10,7 +10,7 @@ define i32 @mulByPow2(i32 %x) {
 }
 
 ; CHECK-LABEL: @divByPow2
-; CHECK: ashr
+; CHECK: ashr i32 %x, 3
 ; CHECK-NOT: sdiv
 define i32 @divByPow2(i32 %x) {
   %result = sdiv i32 %x, 8
@@ -18,7 +18,7 @@ define i32 @divByPow2(i32 %x) {
 }
 
 ; CHECK-LABEL: @udivByPow2
-; CHECK: lshr
+; CHECK: lshr i32 %x, 2
 ; CHECK-NOT: udiv
 define i32 @udivByPow2(i32 %x) {
   %result = udiv i32 %x, 4
@@ -26,7 +26,7 @@ define i32 @udivByPow2(i32 %x) {
 }
 
 ; CHECK-LABEL: @mulByNonPow2
-; CHECK: mul
+; CHECK: mul i32 %x, 6
 ; CHECK-NOT: shl
 define i32 @mulByNonPow2(i32 %x) {
   %result = mul i32 %x, 6
@@ -34,7 +34,7 @@ define i32 @mulByNonPow2(i32 %x) {
 }
 
 ; CHECK-LABEL: @divByNonPow2
-; CHECK: sdiv
+; CHECK: sdiv i32 %x, 6
 ; CHECK-NOT: ashr
 define i32 @divByNonPow2(i32 %x) {
   %result = sdiv i32 %x, 6
