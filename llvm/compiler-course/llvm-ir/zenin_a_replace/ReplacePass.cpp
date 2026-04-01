@@ -7,16 +7,6 @@
 
 namespace {
 
-static int getPowerOfTwo(llvm::Value *value) {
-  if (auto *constInt = llvm::dyn_cast<llvm::ConstantInt>(value)) {
-    int64_t val = constInt->getSExtValue();
-    if (val > 0 && (val & (val - 1)) == 0) {
-      return constInt->getValue().exactLogBase2();
-    }
-  }
-  return -1;
-}
-
 struct ZeninReplacePass : llvm::PassInfoMixin<ZeninReplacePass> {
   llvm::PreservedAnalyses run(llvm::Function &func,
                               llvm::FunctionAnalysisManager &) {
@@ -32,10 +22,11 @@ struct ZeninReplacePass : llvm::PassInfoMixin<ZeninReplacePass> {
             continue;
           }
 
-          int shift = getPowerOfTwo(inst.getOperand(1));
-          if (shift < 0) {
+          auto *constInt =
+              llvm::dyn_cast<llvm::ConstantInt>(binOp->getOperand(1));
+          if (!constInt || !constInt->getValue().isPowerOf2())
             continue;
-          }
+          int shift = constInt->getValue().exactLogBase2();
 
           llvm::IRBuilder<> builder(binOp);
           llvm::Value *shiftAmount =
@@ -45,7 +36,19 @@ struct ZeninReplacePass : llvm::PassInfoMixin<ZeninReplacePass> {
           if (opcode == llvm::Instruction::Mul) {
             newInst = builder.CreateShl(binOp->getOperand(0), shiftAmount);
           } else if (opcode == llvm::Instruction::SDiv) {
-            newInst = builder.CreateAShr(binOp->getOperand(0), shiftAmount);
+            llvm::Value *lhs = binOp->getOperand(0);
+            llvm::Type *type = binOp->getType();
+            unsigned bitWidth = type->getIntegerBitWidth();
+
+            llvm::Value *signShift = llvm::ConstantInt::get(type, bitWidth - 1);
+            llvm::Value *sign = builder.CreateAShr(lhs, signShift);
+
+            llvm::Value *maskVal = llvm::ConstantInt::get(
+                type, llvm::APInt::getLowBitsSet(bitWidth, shift));
+            llvm::Value *mask = builder.CreateAnd(sign, maskVal);
+
+            llvm::Value *corrected = builder.CreateAdd(lhs, mask);
+            newInst = builder.CreateAShr(corrected, shiftAmount);
           } else {
             newInst = builder.CreateLShr(binOp->getOperand(0), shiftAmount);
           }

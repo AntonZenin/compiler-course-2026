@@ -10,7 +10,10 @@ define i32 @mulByPow2(i32 %x) {
 }
 
 ; CHECK-LABEL: @divByPow2
-; CHECK: ashr i32 %x, 3
+; CHECK: ashr i32 %x, 31
+; CHECK-NEXT: and i32
+; CHECK-NEXT: add i32
+; CHECK-NEXT: ashr i32
 ; CHECK-NOT: sdiv
 define i32 @divByPow2(i32 %x) {
   %result = sdiv i32 %x, 8
@@ -40,3 +43,12 @@ define i32 @divByNonPow2(i32 %x) {
   %result = sdiv i32 %x, 6
   ret i32 %result
 }
+
+; CHECK-LABEL: @divByNegative
+; CHECK: sdiv i32 %x, -4
+; CHECK-NOT: ashr
+define i32 @divByNegative(i32 %x) {
+  %result = sdiv i32 %x, -4
+  ret i32 %result
+}
+
