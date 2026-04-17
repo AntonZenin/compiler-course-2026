@@ -1,97 +1,91 @@
-# RUN: llc -mtriple x86_64-unknown-linux-gnu --load=%llvmshlibdir/example_BACKEND%shlibext \
-# RUN: -run-pass=example-x86  %s -o - | FileCheck %s
-
-
-# Source files
-
-# test.cpp
-#
-# [[nodiscard]] bool isEven(int value) noexcept { return value % 2 == 0; }
-
-# test.ll (-O2)
-#
-# define dso_local noundef zeroext i1 @_Z6isEveni(i32 noundef %0) local_unnamed_addr {
-#  %2 = and i32 %0, 1
-#  %3 = icmp eq i32 %2, 0
-#  ret i1 %3
-# }
-
+# RUN: llc -mtriple x86_64-unknown-linux-gnu --load=%llvmshlibdir/NullPass_BACKEND%shlibext \
+# RUN: -run-pass=null-check %s -o - | FileCheck %s
 
 --- |
-  ; ModuleID = 'test.ll'
-  source_filename = "test.ll"
-  target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
-  
-  define dso_local noundef zeroext i1 @_Z6isEveni(i32 noundef %0) local_unnamed_addr {
-    %2 = and i32 %0, 1
-    %3 = icmp eq i32 %2, 0
-    ret i1 %3
+  define i32 @readPtr(ptr %p) {
+    %val = load i32, ptr %p
+    ret i32 %val
   }
 
+  define i32 @noPtr(i32 %x) {
+    ret i32 %x
+  }
+
+  define i32 @twoPtr(ptr %p, ptr %q) {
+    %val1 = load i32, ptr %p
+    %val2 = load i32, ptr %q
+    %sum = add i32 %val1, %val2
+    ret i32 %sum
+  }
 ...
+
 ---
-# CHECK: _Z6isEveni
-# CHECK: name:            _Z6isEveni
-name:            _Z6isEveni
+# CHECK-LABEL: name: readPtr
+# CHECK: TEST64rr $rdi, $rdi
+# CHECK-NEXT: JCC_1
+# CHECK-NEXT: JMP_1
+# CHECK: MOV32rm
+
+name:            readPtr
 alignment:       16
-exposesReturnsTwice: false
-legalized:       false
-regBankSelected: false
-selected:        false
-failedISel:      false
 tracksRegLiveness: true
-hasWinCFI:       false
-callsEHReturn:   false
-callsUnwindInit: false
-hasEHScopes:     false
-hasEHFunclets:   false
-isOutlined:      false
-debugInstrRef:   true
-failsVerification: false
-tracksDebugUserValues: true
-registers:       []
+liveins:
+  - { reg: '$rdi', virtual-reg: '' }
+frameInfo:
+  stackSize:       0
+  maxAlignment:    1
+body:             |
+  bb.0:
+    liveins: $rdi
+
+    renamable $eax = MOV32rm killed renamable $rdi, 1, $noreg, 0, $noreg
+    RET64 $eax
+
+---
+# CHECK-LABEL: name: noPtr
+# CHECK-NOT: TEST64rr
+# CHECK-NOT: JCC_1
+
+name:            noPtr
+alignment:       16
+tracksRegLiveness: true
 liveins:
   - { reg: '$edi', virtual-reg: '' }
 frameInfo:
-  isFrameAddressTaken: false
-  isReturnAddressTaken: false
-  hasStackMap:     false
-  hasPatchPoint:   false
   stackSize:       0
-  offsetAdjustment: 0
   maxAlignment:    1
-  adjustsStack:    false
-  hasCalls:        false
-  stackProtector:  ''
-  functionContext: ''
-  maxCallFrameSize: 0
-  cvBytesOfCalleeSavedRegisters: 0
-  hasOpaqueSPAdjustment: false
-  hasVAStart:      false
-  hasMustTailInVarArgFunc: false
-  hasTailCall:     false
-  isCalleeSavedInfoValid: true
-  localFrameSize:  0
-  savePoint:       ''
-  restorePoint:    ''
-fixedStack:      []
-stack:           []
-entry_values:    []
-callSites:       []
-debugValueSubstitutions: []
-constants:       []
-machineFunctionInfo:
-  amxProgModel:    None
 body:             |
-  bb.0 (%ir-block.1):
+  bb.0:
     liveins: $edi
-  
-    ; CHECK: TEST8ri renamable $dil, 1, implicit-def $eflags, implicit killed $edi
-    ; CHECK-NEXT: renamable $al = SETCCr 4, implicit killed $eflags
-    ; CHECK-NEXT: RET64 $al
 
-    TEST8ri renamable $dil, 1, implicit-def $eflags, implicit killed $edi
-    renamable $al = SETCCr 4, implicit killed $eflags
-    RET64 $al
+    renamable $eax = COPY $edi
+    RET64 $eax
 
-...
+---
+# CHECK-LABEL: name: twoPtr
+# CHECK: TEST64rr $rdi, $rdi
+# CHECK: JCC_1
+# CHECK: JMP_1
+# CHECK: MOV32rm
+# CHECK: TEST64rr $rsi, $rsi
+# CHECK: JCC_1
+# CHECK: JMP_1
+# CHECK: MOV32rm
+
+name:            twoPtr
+alignment:       16
+tracksRegLiveness: true
+liveins:
+  - { reg: '$rdi', virtual-reg: '' }
+  - { reg: '$rsi', virtual-reg: '' }
+frameInfo:
+  stackSize:       0
+  maxAlignment:    1
+body:             |
+  bb.0:
+    liveins: $rdi, $rsi
+
+    renamable $eax = MOV32rm killed renamable $rdi, 1, $noreg, 0, $noreg
+    renamable $ecx = MOV32rm killed renamable $rsi, 1, $noreg, 0, $noreg
+    renamable $eax = ADD32rr renamable $eax, renamable $ecx, implicit-def dead $eflags
+    RET64 $eax
