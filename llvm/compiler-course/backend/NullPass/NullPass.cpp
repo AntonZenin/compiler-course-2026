@@ -1,10 +1,10 @@
 #include "X86.h"
-#include "X86InstrBuilder.h" //добавил
+#include "X86InstrBuilder.h" 
 #include "X86InstrInfo.h"
 #include "X86Subtarget.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/IR/DebugInfoMetadata.h" //добавил
+#include "llvm/IR/DebugInfoMetadata.h" 
 
 using namespace llvm;
 
@@ -21,20 +21,6 @@ private:
   }
 
   Register getBaseReg(const MachineInstr &MI) {
-    for (const auto &MO : MI.operands()) {
-      if (MO.isReg() && (MO.isUse() || MO.isDef())) {
-        if (MO.getReg() != X86::RSP && 
-            MO.getReg() != X86::RBP && 
-            MO.getReg() != X86::RIP &&
-            MO.getReg() != X86::NoRegister) {
-              return MO.getReg();
-        }
-      }
-    }
-    return 0;
-  }
-
-  /*Register getBaseReg(const MachineInstr &MI) {
     const MCInstrDesc &desc = MI.getDesc();
     int memOpStart = X86II::getMemoryOperandNo(desc.TSFlags);
     if (memOpStart < 0) {
@@ -48,15 +34,11 @@ private:
     }
     return baseOp.getReg();
 
-  }*/
+  }
 
-  MachineBasicBlock *createNullHandlerBlock(MachineFunction &MF) {
+  MachineBasicBlock *createNullHandlerBlock(MachineFunction &MF, const X86InstrInfo *TII) {
     MachineBasicBlock *nullBlock = MF.CreateMachineBasicBlock();
     MF.push_back(nullBlock);
-
-    const X86Subtarget &subtarget = MF.getSubtarget<X86Subtarget>();
-    const X86InstrInfo *TII = subtarget.getInstrInfo();
-
     BuildMI(nullBlock, llvm::DebugLoc(), TII->get(X86::TRAP));
 
     return nullBlock;
@@ -69,36 +51,6 @@ bool NullCheckPass::runOnMachineFunction(MachineFunction &MF) {
   const X86Subtarget &subtarget = MF.getSubtarget<X86Subtarget>();
   const X86InstrInfo *TII = subtarget.getInstrInfo();
   bool changed = false;
-
-  /*for (auto &MBB : MF) {
-    for (auto &MI : llvm::make_early_inc_range(MBB)) {
-      if (!readsFromMemory(MI)) {
-        continue;
-      }
-
-      Register baseReg = getBaseReg(MI);
-      if (baseReg == 0) {
-        continue;
-      }
-
-      MachineBasicBlock *nullBlock = createNullHandlerBlock(MF);
-      MachineBasicBlock *continueBlock = MF.CreateMachineBasicBlock();
-      MF.insert(std::next(MBB.getIterator()), continueBlock);
-      continueBlock->splice(continueBlock->begin(), &MBB, MI.getIterator(), MBB.end());
-      continueBlock->transferSuccessors(&MBB);
-      MBB.addSuccessor(continueBlock);
-      MBB.addSuccessor(nullBlock);
-
-      BuildMI(&MBB, llvm::DebugLoc(), TII->get(X86::TEST64rr))
-          .addReg(baseReg)
-          .addReg(baseReg);
-      BuildMI(&MBB, llvm::DebugLoc(), TII->get(X86::JCC_1))
-          .addMBB(nullBlock)
-          .addImm(X86::COND_E);
-      changed = true;
-      break;
-    }
-  }*/
 
   std::vector<MachineInstr*> instructionsToCheck;
   for (auto &MBB : MF) {
@@ -117,17 +69,14 @@ bool NullCheckPass::runOnMachineFunction(MachineFunction &MF) {
       continue;
     
     
-    MachineBasicBlock *nullBlock = createNullHandlerBlock(MF);
+    MachineBasicBlock *nullBlock = createNullHandlerBlock(MF, TII);
     MachineBasicBlock *continueBlock = MF.CreateMachineBasicBlock();
     
     
     MF.insert(std::next(MachineFunction::iterator(currMBB)), continueBlock);
-    
-    
-    auto it = MI->getIterator();
-    auto end = currMBB->end();
-    continueBlock->splice(continueBlock->begin(), currMBB, it, end);
-    
+
+    continueBlock->splice(continueBlock->begin(), currMBB,
+                          MI->getIterator(), currMBB->end());    
     
     continueBlock->transferSuccessors(currMBB);
   
@@ -142,9 +91,8 @@ bool NullCheckPass::runOnMachineFunction(MachineFunction &MF) {
         .addMBB(nullBlock)
         .addImm(X86::COND_E);
     
-    if (!currMBB->empty() && !currMBB->back().isTerminator()) {
-      BuildMI(currMBB, DebugLoc(), TII->get(X86::JMP_1)).addMBB(continueBlock);
-    }
+    BuildMI(currMBB, DebugLoc(), TII->get(X86::JMP_1))
+    .addMBB(continueBlock);
     
     changed = true;
   }
@@ -155,3 +103,4 @@ bool NullCheckPass::runOnMachineFunction(MachineFunction &MF) {
 
 static RegisterPass<NullCheckPass> X("null-check", "Null pointer check pass", false,
                                    false);
+
