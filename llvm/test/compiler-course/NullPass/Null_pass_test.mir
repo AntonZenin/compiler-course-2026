@@ -22,7 +22,7 @@
 ---
 # CHECK-LABEL: name: readPtr
 # CHECK: TEST64rr $rdi, $rdi
-# CHECK-NEXT: JCC_1
+# CHECK-NEXT: JCC_1 {{.*}}, 4
 # CHECK-NEXT: JMP_1
 # CHECK: MOV32rm
 
@@ -64,11 +64,11 @@ body:             |
 ---
 # CHECK-LABEL: name: twoPtr
 # CHECK: TEST64rr $rdi, $rdi
-# CHECK: JCC_1
+# CHECK: JCC_1 {{.*}}, 4
 # CHECK: JMP_1
 # CHECK: MOV32rm
 # CHECK: TEST64rr $rsi, $rsi
-# CHECK: JCC_1
+# CHECK: JCC_1 {{.*}}, 4
 # CHECK: JMP_1
 # CHECK: MOV32rm
 
