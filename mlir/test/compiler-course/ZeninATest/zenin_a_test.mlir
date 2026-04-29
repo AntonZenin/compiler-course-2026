@@ -1,23 +1,52 @@
-// RUN: mlir-opt -load-pass-plugin=%mlir_lib_dir/example_MLIR%shlibext --pass-pipeline="builtin.module(example_MLIR)" %s | FileCheck %s
+// RUN: mlir-opt -load-pass-plugin=%mlir_lib_dir/ZeninALab4_MLIR%shlibext --pass-pipeline="builtin.module(zenin-memref-copy)" %s | FileCheck %s
 
-// CHECK: Count operations: 7
-// CHECK-NEXT: module attributes {{.*}} {
-// CHECK-NEXT:   llvm.func local_unnamed_addr @_Z6isEveni(%arg0: i32 {llvm.noundef}) -> (i1 {llvm.noundef, llvm.zeroext}) attributes {{.*}} {
-// CHECK-NEXT:     %0 = llvm.mlir.constant(1 : i32) : i32
-// CHECK-NEXT:     %1 = llvm.mlir.constant(0 : i32) : i32
-// CHECK-NEXT:     %2 = llvm.and %arg0, %0  : i32
-// CHECK-NEXT:     %3 = llvm.icmp "eq" %2, %1 : i32
-// CHECK-NEXT:     llvm.return %3 : i1
-// CHECK-NEXT:   }
-// CHECK-NEXT: }
 
-module attributes {dlti.dl_spec = #dlti.dl_spec<#dlti.dl_entry<f64, dense<64> : vector<2xi64>>, #dlti.dl_entry<f16, dense<16> : vector<2xi64>>, #dlti.dl_entry<f128, dense<128> : vector<2xi64>>, #dlti.dl_entry<!llvm.ptr<270>, dense<32> : vector<4xi64>>, #dlti.dl_entry<!llvm.ptr<271>, dense<32> : vector<4xi64>>, #dlti.dl_entry<!llvm.ptr<272>, dense<64> : vector<4xi64>>, #dlti.dl_entry<i64, dense<64> : vector<2xi64>>, #dlti.dl_entry<i128, dense<128> : vector<2xi64>>, #dlti.dl_entry<f80, dense<128> : vector<2xi64>>, #dlti.dl_entry<!llvm.ptr, dense<64> : vector<4xi64>>, #dlti.dl_entry<i1, dense<8> : vector<2xi64>>, #dlti.dl_entry<i8, dense<8> : vector<2xi64>>, #dlti.dl_entry<i16, dense<16> : vector<2xi64>>, #dlti.dl_entry<i32, dense<32> : vector<2xi64>>, #dlti.dl_entry<"dlti.endianness", "little">, #dlti.dl_entry<"dlti.stack_alignment", 128 : i64>>} {
-  llvm.func local_unnamed_addr @_Z6isEveni(%arg0: i32 {llvm.noundef}) -> (i1 {llvm.noundef, llvm.zeroext}) attributes {memory = #llvm.memory_effects<other = none, argMem = none, inaccessibleMem = none>, no_unwind, passthrough = ["mustprogress", "nofree", "norecurse", "nosync", ["uwtable", "2"], ["min-legal-vector-width", "0"], ["no-trapping-math", "true"], ["stack-protector-buffer-size", "8"], ["target-cpu", "x86-64"]], target_cpu = "x86-64", target_features = #llvm.target_features<["+cmov", "+cx8", "+fxsr", "+mmx", "+sse", "+sse2", "+x87"]>, tune_cpu = "generic", will_return} {
-    %0 = llvm.mlir.constant(1 : i32) : i32
-    %1 = llvm.mlir.constant(0 : i32) : i32
-    %2 = llvm.and %arg0, %0  : i32
-    %3 = llvm.icmp "eq" %2, %1 : i32
-    llvm.return %3 : i1
-  }
+// CHECK-LABEL: func.func @copy_test
+// CHECK: %[[C0:.*]] = arith.constant 0 : index
+// CHECK: %[[C1:.*]] = arith.constant 1 : index
+// CHECK: %[[C4:.*]] = arith.constant 4 : index
+// CHECK: scf.for %[[I:.*]] = %[[C0]] to %[[C4]] step %[[C1]] {
+// CHECK:   %[[VAL:.*]] = memref.load
+// CHECK:   memref.store
+// CHECK: }
+// CHECK-NOT: memref.copy
+func.func @copy_test(%src: memref<4xi32>, %dst: memref<4xi32>) {
+  memref.copy %src, %dst : memref<4xi32> to memref<4xi32>
+  return
 }
 
+
+// CHECK-LABEL: func.func @copy_size8
+// CHECK: %[[C8:.*]] = arith.constant 8 : index
+// CHECK: scf.for {{.*}} to %[[C8]]
+// CHECK-NOT: memref.copy
+func.func @copy_size8(%src: memref<8xi32>, %dst: memref<8xi32>) {
+  memref.copy %src, %dst : memref<8xi32> to memref<8xi32>
+  return
+}
+
+// CHECK-LABEL: func.func @copy_f32
+// CHECK: scf.for
+// CHECK: memref.load
+// CHECK: memref.store
+// CHECK-NOT: memref.copy
+func.func @copy_f32(%src: memref<4xf32>, %dst: memref<4xf32>) {
+  memref.copy %src, %dst : memref<4xf32> to memref<4xf32>
+  return
+}
+
+// CHECK-LABEL: func.func @copy_dynamic
+// CHECK: memref.copy
+// CHECK-NOT: scf.for
+func.func @copy_dynamic(%src: memref<?xi32>, %dst: memref<?xi32>) {
+  memref.copy %src, %dst : memref<?xi32> to memref<?xi32>
+  return
+}
+
+// CHECK-LABEL: func.func @copy_2d
+// CHECK: memref.copy
+// CHECK-NOT: scf.for
+func.func @copy_2d(%src: memref<4x4xi32>, %dst: memref<4x4xi32>) {
+  memref.copy %src, %dst : memref<4x4xi32> to memref<4x4xi32>
+  return
+}
