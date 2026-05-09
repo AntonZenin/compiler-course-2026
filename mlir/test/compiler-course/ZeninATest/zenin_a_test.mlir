@@ -3,12 +3,12 @@
 
 // CHECK-LABEL: func.func @copy_test
 // CHECK: %[[C0:.*]] = arith.constant 0 : index
-// CHECK: %[[C1:.*]] = arith.constant 1 : index
-// CHECK: %[[C4:.*]] = arith.constant 4 : index
-// CHECK: scf.for %[[I:.*]] = %[[C0]] to %[[C4]] step %[[C1]] {
-// CHECK:   %[[VAL:.*]] = memref.load
-// CHECK:   memref.store
-// CHECK: }
+// CHECK-NEXT: %[[C1:.*]] = arith.constant 1 : index
+// CHECK-NEXT: %[[C4:.*]] = arith.constant 4 : index
+// CHECK-NEXT: scf.for %[[I:.*]] = %[[C0]] to %[[C4]] step %[[C1]] {
+// CHECK-NEXT:   %[[VAL:.*]] = memref.load
+// CHECK-NEXT:   memref.store
+// CHECK-NEXT: }
 // CHECK-NOT: memref.copy
 func.func @copy_test(%src: memref<4xi32>, %dst: memref<4xi32>) {
   memref.copy %src, %dst : memref<4xi32> to memref<4xi32>
@@ -28,7 +28,7 @@ func.func @copy_size8(%src: memref<8xi32>, %dst: memref<8xi32>) {
 // CHECK-LABEL: func.func @copy_f32
 // CHECK: scf.for
 // CHECK: memref.load
-// CHECK: memref.store
+// CHECK-NEXT: memref.store
 // CHECK-NOT: memref.copy
 func.func @copy_f32(%src: memref<4xf32>, %dst: memref<4xf32>) {
   memref.copy %src, %dst : memref<4xf32> to memref<4xf32>
